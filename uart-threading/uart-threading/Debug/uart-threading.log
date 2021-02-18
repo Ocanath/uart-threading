@@ -1,0 +1,6 @@
+﻿  main.cpp
+  usb-com-handle.cpp
+D:\OcanathProj\gramphics\uart-threading\uart-threading\uart-threading\usb-com-handle.cpp(40,36): warning C4305: '=': truncation from 'WORD' to 'BYTE'
+D:\OcanathProj\gramphics\uart-threading\uart-threading\uart-threading\usb-com-handle.cpp(40,25): warning C4309: '=': truncation of constant value
+  Generating Code...
+  uart-threading.vcxproj -> D:\OcanathProj\gramphics\uart-threading\uart-threading\Debug\uart-threading.exe
