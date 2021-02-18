@@ -4,7 +4,11 @@
 #define HALF_PI 1.57079633f
 #define PI 3.14159265359f
 
-#define NUM_FLOATS_READ 1	//number of frames on the robot. Zeroeth index is an align word.
+
+
+volatile float data_log[NUM_FLOATS_READ][LOG_SIZE];
+
+
 volatile float q_share[NUM_FLOATS_READ];
 volatile float tau_share[NUM_FLOATS_READ];
 volatile uint8_t r_share_mutex = 0;
@@ -81,19 +85,26 @@ void usb_COM_handle_thread()
 	//float dongle_tx_data[NUM_FLOATS_READ];
 	
 	uint64_t uart_tx_ts = 0;
+	int log_idx = 0;
 	while (exit_signal == 0)
 	{
 		int trans_size = sizeof(float) * NUM_FLOATS_READ+1;
+		for (int i = 0; i < trans_size; i++)
+			read_arr.d[i] = 0;
+
 		int isread = ReadFile(serial_handle, (uint8_t*)(read_arr.d), trans_size, &dwbytesread, NULL);
 
 		if (read_arr.d[trans_size - 1] == get_checksum((uint8_t*)read_arr.d, trans_size - 1))
 		{
-			r_share_mutex = 0;
 			for (int i = 0; i < NUM_FLOATS_READ; i++)
+			{
+				data_log[i][log_idx] = q_share[i];
 				q_share[i] = read_arr.v[i];
+			}
+			log_idx++;
+			if (log_idx >= LOG_SIZE)
+				exit_signal = 1;
 		}
-		r_share_mutex = 1;
-
 
 		//if (GetTickCount64() > uart_tx_ts)
 		//{
@@ -103,6 +114,8 @@ void usb_COM_handle_thread()
 		//}
 	}
 	CloseHandle(serial_handle);
+	//for (int i = 0; i < LOG_SIZE; i++)
+	//	printf("%f\r\n", data_log[0][i]);
 }
 
 
