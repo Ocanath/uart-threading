@@ -1,35 +1,14 @@
 #include "usb-com-handle.h"
 #include <Windows.h>
 
-#define HALF_PI 1.57079633f
-#define PI 3.14159265359f
-
-
-
-volatile float data_log[NUM_FLOATS_READ][LOG_SIZE];
-
-
-volatile float q_share[NUM_FLOATS_READ];
-volatile float tau_share[NUM_FLOATS_READ];
-volatile uint8_t r_share_mutex = 0;
-uint8_t exit_signal = 0;
-
-#define NUM_RX_BUF_BYTES 4
-
-typedef union
-{
-	float v[NUM_FLOATS_READ];
-	uint8_t d[sizeof(float)* NUM_FLOATS_READ + 1];
-}fread_arr_t;
-
-volatile static fread_arr_t read_arr;
-
-
+volatile uint8_t exit_signal = 0;
 
 HANDLE serial_handle;
 DWORD dwbyteswritten;
 DWORD dwbytesread;
 
+static volatile uint8_t read_buf[10] = { 0 };
+volatile uint16_t data_buf[6] = { 0 };
 
 int connect_com_port(const char * port)
 {
@@ -64,6 +43,18 @@ uint8_t get_checksum(uint8_t* arr, int size)
 	return -checksum;
 }
 
+/**/
+void unpack_8bit_into_12bit(uint8_t* arr, uint16_t* vals, int valsize)
+{
+	for (int bidx = valsize * 12 - 4; bidx >= 0; bidx -= 4)
+	{
+		int validx = bidx / 12;
+		int arridx = bidx / 8;
+		int shift_val = (bidx % 8);
+		vals[validx] |= ((arr[arridx] >> shift_val) & 0x0F) << (bidx % 12);
+	}
+}
+
 
 /*
 TODO: autofind the com port
@@ -79,43 +70,18 @@ void usb_COM_handle_thread()
 	timeout.WriteTotalTimeoutConstant = 50;
 	timeout.WriteTotalTimeoutMultiplier = 10;
 	SetCommTimeouts(serial_handle, &timeout);
-
-
-	//float dongle_rx_data[NUM_FLOATS_READ];
-	//float dongle_tx_data[NUM_FLOATS_READ];
 	
 	uint64_t uart_tx_ts = 0;
 	int log_idx = 0;
 	while (exit_signal == 0)
 	{
-		int trans_size = sizeof(float) * NUM_FLOATS_READ+1;
-		for (int i = 0; i < trans_size; i++)
-			read_arr.d[i] = 0;
-
-		int isread = ReadFile(serial_handle, (uint8_t*)(read_arr.d), trans_size, &dwbytesread, NULL);
-
-		if (read_arr.d[trans_size - 1] == get_checksum((uint8_t*)read_arr.d, trans_size - 1))
+		int isread = ReadFile(serial_handle, (uint8_t*)read_buf, 10, &dwbytesread, NULL);
+		if (read_buf[9] == get_checksum( (uint8_t*)read_buf, 9))
 		{
-			for (int i = 0; i < NUM_FLOATS_READ; i++)
-			{
-				data_log[i][log_idx] = q_share[i];
-				q_share[i] = read_arr.v[i];
-			}
-			log_idx++;
-			if (log_idx >= LOG_SIZE)
-				exit_signal = 1;
+			unpack_8bit_into_12bit((uint8_t*)read_buf, (uint16_t*)data_buf, 6);
 		}
-
-		//if (GetTickCount64() > uart_tx_ts)
-		//{
-		//	WriteFile(serial_handle, (uint8_t*)(tau_share), trans_size, &dwbyteswritten, NULL);
-
-		//	uart_tx_ts = GetTickCount64() + 10;
-		//}
 	}
 	CloseHandle(serial_handle);
-	//for (int i = 0; i < LOG_SIZE; i++)
-	//	printf("%f\r\n", data_log[0][i]);
 }
 
 
